@@ -11,10 +11,6 @@ Changelog
 * Created module
 #>
 
-# Set our implicit globals
-[string]$Global:NexusBaseUrl = $null;
-[string]$Global:NexusAuthToken = $null;
-
 # Script vars
 $ScriptPath = Split-Path $MyInvocation.MyCommand.Path
 

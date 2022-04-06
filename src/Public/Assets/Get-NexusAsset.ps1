@@ -25,6 +25,7 @@ function Get-NexusAsset {
 
   begin {
     $slug = "v1/assets"
+    $assets = New-Object Collections.Generic.List[PSCustomObject]
 
     if (-not $script:Hostname) {
       throw "No server configured, must call Set-NexusServer first."
@@ -53,15 +54,16 @@ function Get-NexusAsset {
       ContentType = 'application/json'
       UseBasicParsing = $true
     }
+    Write-Verbose "Uri: $($script:Uri)/$slug"
 
     try {
       $req = Invoke-RestMethod @params
-
+      
       while ($req.continuationToken -and ($NoContinuationToken -eq $false)) {
         $params.Uri = "$($script:Uri)/$slug&continuationToken=$($req.continuationToken)"
         $req.continuationToken = $null
-        
-        $req += Invoke-RestMethod @params
+
+        $req = Invoke-RestMethod @params
       }
 
       return $req
@@ -94,6 +96,7 @@ function Get-NexusAsset {
           return [PSCustomObject]@{
             StatusCode = $reqError
             message = "Unknown error: $responseCode"
+            exception = $_
           }
         }
       }
