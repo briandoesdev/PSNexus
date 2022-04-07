@@ -10,96 +10,140 @@
 #>
 
 function Get-NexusAsset {
-  [CmdletBinding(DefaultParameterSetName = "Asset")]
+
+  [CmdletBinding(DefaultParameterSetName = "Id")]
   param(
-    [Parameter(Mandatory, ParameterSetName = "Repository")]
+    [Parameter(Mandatory, ParameterSetName = "Repo")]
     [string]$Repository,
 
-    [Parameter(Mandatory, ParameterSetName = "Asset")]
-    [Alias("Asset")]
-    [string]$AssetId,
+    [Parameter(ParameterSetName = "Repo")]
+    [string]$ContinuationToken = $null,
 
-    [Parameter(ParameterSetName = "Repository")]
-    [switch]$NoContinuationToken
+    [Parameter(Mandatory, ParameterSetName = "Id")]
+    [string]$Id
   )
 
   begin {
+    # api endpoint to get assets
     $slug = "v1/assets"
-    $assets = New-Object Collections.Generic.List[PSCustomObject]
 
+    # basic check to verify server information exists
     if (-not $script:Hostname) {
       throw "No server configured, must call Set-NexusServer first."
     }
   }
 
   process {
-    Write-Verbose "PSCmdlet.ParameterSetName is $($PSCmdlet.ParameterSetName)"
     switch ($PSCmdlet.ParameterSetName) {
-      "Repository" {
-        $slug = "{0}?repository=$Repository" -f $slug
-        Write-Verbose "Slug is of Repo"
-      }
 
-      "Asset" {
-        $slug = "$slug/$AssetId"
-        Write-Verbose "Slug is of Asset"
-      }
-    }
-    Write-Verbose "Slug: $slug"
-    
-    $params = @{
-      Method = 'GET'
-      Uri = "$($script:Uri)/$slug"
-      Headers = $script:Header
-      ContentType = 'application/json'
-      UseBasicParsing = $true
-    }
-    Write-Verbose "Uri: $($script:Uri)/$slug"
+      "Repo" {
+        try {
 
-    try {
-      $req = Invoke-RestMethod @params
-      
-      while ($req.continuationToken -and ($NoContinuationToken -eq $false)) {
-        $params.Uri = "$($script:Uri)/$slug&continuationToken=$($req.continuationToken)"
-        $req.continuationToken = $null
-
-        $req = Invoke-RestMethod @params
-      }
-
-      return $req
-    }
-    catch {
-      [int]$reqError = $_.Exception.Response.StatusCode
-      switch ($reqError) {
-        403 {
-          return [PSCustomObject]@{
-            StatusCode = $reqError
-            message = "Insufficient permissions"
+          $assets = [System.Collections.Generic.List[object]]::New()
+          $params = @{
+            Method = 'GET'
+            Uri = "$($script:Uri)/$($slug)?repository=$Repository"
+            Headers = $script:Header
+            ContentType = 'application/json'
+            UseBasicParsing = $true
           }
-        }
 
-        404 { 
-          return [PSCustomObject]@{
-            StatusCode = $reqError
-            message = "Asset not found"
-          }
-        }
+          do {
+            # tacky, but it works.
+            $params.Uri = "$($script:Uri)/$($slug)?repository=$Repository"
 
-        422 {
+            if ($resp.continuationToken) {
+              $params.Uri = "$($params.Uri)&continuationToken=$($resp.continuationToken)"
+              $resp.continuationToken = $null
+            }
+            
+            $resp = Invoke-RestMethod @params
+            $assets.AddRange($resp.Items)
+          } while ($resp.continuationToken)
+          
           return [PSCustomObject]@{
-            StatusCode = $reqError
-            message = "Malformed request"
+            StatusCode = 200
+            Items = $assets
           }
-        }
+        } catch {
+          [int]$reqError = $_.Exception.Response.StatusCode
+          switch ($reqError) {
+            403 {
+              $respError = [PSCustomObject]@{
+                StatusCode = $reqError
+                Message = "Insufficient permissions to list components"
+              }
+            };
 
-        default { 
-          return [PSCustomObject]@{
-            StatusCode = $reqError
-            message = "Unknown error: $responseCode"
-            exception = $_
+            422 {
+              $respError = [PSCustomObject]@{
+                StatusCode = $reqError
+                Message = "Parameter 'repository' is required"
+              }
+            };
+
+            default {
+              $respError = [PSCustomObject]@{
+                StatusCode = $reqError
+                Message = "Get-NexusAsset [Repo]: Undocumented error has occurred!"
+              }
+            };
           }
+
+          return $respError
         }
-      }
+      };
+
+      "Id" {
+        try {
+          $params = @{
+            Method = 'GET'
+            Uri = "$($script:Uri)/$($slug)/$Id"
+            Headers = $script:Header
+            ContentType = 'application/json'
+            UseBasicParsing = $true
+          }
+          $resp = Invoke-RestMethod @params
+  
+          return [PSCustomObject]@{
+            StatusCode = 200
+            Asset = $resp
+          }
+        } catch {
+          [int]$reqError = $_.Exception.Response.StatusCode
+          switch ($reqError) {
+            403 {
+              $respError = [PSCustomObject]@{
+                StatusCode = $reqError
+                Message = "Insufficient permissions to list components"
+              }
+            };
+
+            404 {
+              $respError = [PSCustomObject]@{
+                StatusCode = $reqError
+                Message = "Asset not found"
+              }
+            };
+
+            422 {
+              $respError = [PSCustomObject]@{
+                StatusCode = $reqError
+                Message = "Malformed ID"
+              }
+            };
+
+            default {
+              $respError = [PSCustomObject]@{
+                StatusCode = $reqError
+                Message = "Get-NexusAsset [Id]: Undocumented error has occurred!"
+              }
+            };
+          }
+
+          return $respError
+        }
+      };
     }
   }
 }

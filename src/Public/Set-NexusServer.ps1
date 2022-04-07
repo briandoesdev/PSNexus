@@ -11,7 +11,8 @@
 #>
 
 function Set-NexusServer {
-
+  [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseDeclaredVarsMoreThanAssignments", "")]
+  
   [CmdletBinding()]
   param(
     [Parameter(Mandatory, Position = 0)]

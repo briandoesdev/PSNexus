@@ -38,6 +38,7 @@ function Get-NexusComponent {
           }
 
           do {
+            # tacky, but it works.
             $params.Uri = "$($script:Uri)/$($slug)?repository=$Repository"
 
             if ($resp.continuationToken) {
